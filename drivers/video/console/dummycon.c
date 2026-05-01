@@ -105,6 +105,13 @@ static int con_scrolldelta(struct vc_data *vc, int x)
 	return 0;
 }
 
+static int dummycon_dummy(struct vc_data *c)
+{
+	return 0;
+}
+
+#define DUMMY (void *) dummycon_dummy
+
 /*
  *  The console `switch' structure for the dummy console
  *
