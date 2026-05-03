@@ -354,9 +354,6 @@ static struct dwc3_ep *dwc3_wIndex_to_dep(struct dwc3 *dwc, __le16 wIndex_le)
 		epnum |= 1;
 
 	dep = dwc->eps[epnum];
-	if (dep == NULL)
-		return NULL;
-
 	if (dep->flags & DWC3_EP_ENABLED)
 		return dep;
 
@@ -418,7 +415,9 @@ static int dwc3_ep0_handle_status(struct dwc3 *dwc,
 		 */
 
 		ret = dwc3_ep0_delegate_req(dwc, ctrl);
-		return ret;
+		if (ret)
+			return ret;
+		break;
 
 	case USB_RECIP_ENDPOINT:
 		dep = dwc3_wIndex_to_dep(dwc, ctrl->wIndex);
@@ -602,9 +601,8 @@ static int dwc3_ep0_set_config(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 {
 	enum usb_device_state state = dwc->gadget.state;
 	u32 cfg;
-	int ret, num;
+	int ret;
 	u32 reg;
-	struct dwc3_ep	*dep;
 
 	cfg = le16_to_cpu(ctrl->wValue);
 
@@ -613,32 +611,6 @@ static int dwc3_ep0_set_config(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 		return -EINVAL;
 
 	case USB_STATE_ADDRESS:
-		/*
-		 * If tx-fifo-resize flag is not set for the controller, then
-		 * do not clear existing allocated TXFIFO since we do not
-		 * allocate it again in dwc3_gadget_resize_tx_fifos
-		 */
-		if (dwc->needs_fifo_resize) {
-			/* Read ep0IN related TXFIFO size */
-			dwc->last_fifo_depth = (dwc3_readl(dwc->regs,
-						DWC3_GTXFIFOSIZ(0)) & 0xFFFF);
-			/* Clear existing TXFIFO for all IN eps except ep0 */
-			for (num = 0; num < dwc->num_in_eps; num++) {
-				dep = dwc->eps[(num << 1) | 1];
-				if (num) {
-					dwc3_writel(dwc->regs,
-						DWC3_GTXFIFOSIZ(num), 0);
-					dep->fifo_depth = 0;
-				} else {
-					dep->fifo_depth = dwc->last_fifo_depth;
-				}
-
-				dev_dbg(dwc->dev, "%s(): %s fifo_depth:%x\n",
-					__func__, dep->name, dep->fifo_depth);
-				dbg_event(0xFF, "fifo_reset", dep->number);
-			}
-		}
-
 		ret = dwc3_ep0_delegate_req(dwc, ctrl);
 		/* if the cfg matches and the cfg is non zero */
 		if (cfg && (!ret || (ret == USB_GADGET_DELAYED_STATUS))) {
@@ -663,6 +635,9 @@ static int dwc3_ep0_set_config(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 							DWC3_DCTL_ACCEPTU2ENA);
 				dwc3_writel(dwc->regs, DWC3_DCTL, reg);
 			}
+
+			dwc->resize_fifos = true;
+			dwc3_trace(trace_dwc3_ep0, "resize FIFOs flag SET");
 		}
 		break;
 
@@ -1110,6 +1085,11 @@ static int dwc3_ep0_start_control_status(struct dwc3_ep *dep)
 static void __dwc3_ep0_do_control_status(struct dwc3 *dwc, struct dwc3_ep *dep)
 {
 	int ret;
+	if (dwc->resize_fifos) {
+		dwc3_trace(trace_dwc3_ep0, "Resizing FIFOs");
+		dwc3_gadget_resize_tx_fifos(dwc);
+		dwc->resize_fifos = 0;
+	}
 
 	ret = dwc3_ep0_start_control_status(dep);
 	if (WARN_ON_ONCE(ret))
@@ -1124,18 +1104,13 @@ static void dwc3_ep0_do_control_status(struct dwc3 *dwc,
 	__dwc3_ep0_do_control_status(dwc, dep);
 }
 
-void dwc3_ep0_end_control_data(struct dwc3 *dwc, struct dwc3_ep *dep)
+static void dwc3_ep0_end_control_data(struct dwc3 *dwc, struct dwc3_ep *dep)
 {
 	struct dwc3_gadget_ep_cmd_params params;
 	u32			cmd;
 	int			ret;
 
-	/*
-	 * For status/DATA OUT stage, TRB will be queued on ep0 out
-	 * endpoint for which resource index is zero. Hence allow
-	 * queuing ENDXFER command for ep0 out endpoint.
-	 */
-	if (!dep->resource_index && dep->number)
+	if (!dep->resource_index)
 		return;
 
 	cmd = DWC3_DEPCMD_ENDTRANSFER;

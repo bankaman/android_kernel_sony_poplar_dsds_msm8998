@@ -11,6 +11,11 @@
  *	it under the terms of the GNU General Public License; either
  *	version 2 of the License, as published by the Free Software Foundation.
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2013 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/proc_fs.h>
@@ -136,8 +141,6 @@ static ssize_t quota_proc_write(struct file *file, const char __user *input,
 	if (copy_from_user(buf, input, size) != 0)
 		return -EFAULT;
 	buf[sizeof(buf)-1] = '\0';
-	if (size < sizeof(buf))
-		buf[size] = '\0';
 
 	spin_lock_bh(&e->lock);
 	e->quota = simple_strtoull(buf, NULL, 0);
@@ -275,8 +278,8 @@ static void quota_mt2_destroy(const struct xt_mtdtor_param *par)
 	}
 
 	list_del(&e->list);
-	spin_unlock_bh(&counter_list_lock);
 	remove_proc_entry(e->name, proc_xt_quota);
+	spin_unlock_bh(&counter_list_lock);
 	kfree(e);
 }
 
@@ -285,8 +288,6 @@ quota_mt2(const struct sk_buff *skb, struct xt_action_param *par)
 {
 	struct xt_quota_mtinfo2 *q = (void *)par->matchinfo;
 	struct xt_quota_counter *e = q->master;
-	int charge = (q->flags & XT_QUOTA_PACKET) ? 1 : skb->len;
-	bool no_change = q->flags & XT_QUOTA_NO_CHANGE;
 	bool ret = q->flags & XT_QUOTA_INVERT;
 
 	spin_lock_bh(&e->lock);
@@ -295,17 +296,20 @@ quota_mt2(const struct sk_buff *skb, struct xt_action_param *par)
 		 * While no_change is pointless in "grow" mode, we will
 		 * implement it here simply to have a consistent behavior.
 		 */
-		if (!no_change)
-			e->quota += charge;
-		ret = true; /* note: does not respect inversion (bug??) */
+		if (!(q->flags & XT_QUOTA_NO_CHANGE)) {
+			e->quota += (q->flags & XT_QUOTA_PACKET) ? 1 : skb->len;
+		}
+		ret = true;
 	} else {
-		if (e->quota > charge) {
-			if (!no_change)
-				e->quota -= charge;
+		if (e->quota > skb->len) {
+			if (!(q->flags & XT_QUOTA_NO_CHANGE))
+				e->quota -= (q->flags & XT_QUOTA_PACKET) ? 1 : skb->len;
 			ret = !ret;
-		} else if (e->quota) {
+		} else {
 			/* We are transitioning, log that fact. */
-			quota2_log(par->in, par->out, e, q->name);
+			if (e->quota) {
+				quota2_log(par->in, par->out, e, q->name);
+			}
 			/* we do not allow even small packets from now on */
 			e->quota = 0;
 		}
@@ -323,7 +327,6 @@ static struct xt_match quota_mt2_reg[] __read_mostly = {
 		.match      = quota_mt2,
 		.destroy    = quota_mt2_destroy,
 		.matchsize  = sizeof(struct xt_quota_mtinfo2),
-		.usersize   = offsetof(struct xt_quota_mtinfo2, master),
 		.me         = THIS_MODULE,
 	},
 	{
@@ -334,7 +337,6 @@ static struct xt_match quota_mt2_reg[] __read_mostly = {
 		.match      = quota_mt2,
 		.destroy    = quota_mt2_destroy,
 		.matchsize  = sizeof(struct xt_quota_mtinfo2),
-		.usersize   = offsetof(struct xt_quota_mtinfo2, master),
 		.me         = THIS_MODULE,
 	},
 };

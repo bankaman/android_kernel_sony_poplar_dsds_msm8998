@@ -130,6 +130,7 @@ static void pcrypt_aead_done(struct crypto_async_request *areq, int err)
 	struct padata_priv *padata = pcrypt_request_padata(preq);
 
 	padata->info = err;
+	req->base.flags &= ~CRYPTO_TFM_REQ_MAY_SLEEP;
 
 	padata_do_serial(padata);
 }
@@ -138,14 +139,12 @@ static void pcrypt_aead_enc(struct padata_priv *padata)
 {
 	struct pcrypt_request *preq = pcrypt_padata_request(padata);
 	struct aead_request *req = pcrypt_request_ctx(preq);
-	int ret;
 
-	ret = crypto_aead_encrypt(req);
+	padata->info = crypto_aead_encrypt(req);
 
-	if (ret == -EINPROGRESS)
+	if (padata->info == -EINPROGRESS)
 		return;
 
-	padata->info = ret;
 	padata_do_serial(padata);
 }
 
@@ -182,14 +181,12 @@ static void pcrypt_aead_dec(struct padata_priv *padata)
 {
 	struct pcrypt_request *preq = pcrypt_padata_request(padata);
 	struct aead_request *req = pcrypt_request_ctx(preq);
-	int ret;
 
-	ret = crypto_aead_decrypt(req);
+	padata->info = crypto_aead_decrypt(req);
 
-	if (ret == -EINPROGRESS)
+	if (padata->info == -EINPROGRESS)
 		return;
 
-	padata->info = ret;
 	padata_do_serial(padata);
 }
 

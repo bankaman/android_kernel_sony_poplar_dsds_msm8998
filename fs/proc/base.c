@@ -46,6 +46,11 @@
  *  Paul Mundt <paul.mundt@nokia.com>:
  *  Overall revision about smaps.
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2017 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #include <asm/uaccess.h>
 
@@ -88,6 +93,7 @@
 #include <linux/flex_array.h>
 #include <linux/posix-timers.h>
 #include <linux/cpufreq_times.h>
+#include <linux/oom_score_notifier.h>
 #ifdef CONFIG_HARDWALL
 #include <asm/hardwall.h>
 #endif
@@ -233,12 +239,12 @@ static ssize_t proc_pid_cmdline_read(struct file *file, char __user *buf,
 		goto out_mmput;
 	}
 
-	spin_lock(&mm->arg_lock);
+	down_read(&mm->mmap_sem);
 	arg_start = mm->arg_start;
 	arg_end = mm->arg_end;
 	env_start = mm->env_start;
 	env_end = mm->env_end;
-	spin_unlock(&mm->arg_lock);
+	up_read(&mm->mmap_sem);
 
 	BUG_ON(arg_start > arg_end);
 	BUG_ON(env_start > env_end);
@@ -888,7 +894,7 @@ static ssize_t mem_rw(struct file *file, char __user *buf,
 		flags |= FOLL_WRITE;
 
 	while (count > 0) {
-		size_t this_len = min_t(size_t, count, PAGE_SIZE);
+		int this_len = min_t(int, count, PAGE_SIZE);
 
 		if (write && copy_from_user(page, buf, this_len)) {
 			copied = -EFAULT;
@@ -990,10 +996,10 @@ static ssize_t environ_read(struct file *file, char __user *buf,
 	if (!atomic_inc_not_zero(&mm->mm_users))
 		goto free;
 
-	spin_lock(&mm->arg_lock);
+	down_read(&mm->mmap_sem);
 	env_start = mm->env_start;
 	env_end = mm->env_end;
-	spin_unlock(&mm->arg_lock);
+	up_read(&mm->mmap_sem);
 
 	while (count > 0) {
 		size_t this_len, max_len;
@@ -1086,6 +1092,7 @@ static ssize_t oom_adj_write(struct file *file, const char __user *buf,
 	int oom_adj;
 	unsigned long flags;
 	int err;
+	int old_oom_score_adj;
 
 	memset(buffer, 0, sizeof(buffer));
 	if (count > sizeof(buffer) - 1)
@@ -1143,8 +1150,16 @@ static ssize_t oom_adj_write(struct file *file, const char __user *buf,
 	pr_warn_once("%s (%d): /proc/%d/oom_adj is deprecated, please use /proc/%d/oom_score_adj instead.\n",
 		  current->comm, task_pid_nr(current), task_pid_nr(task),
 		  task_pid_nr(task));
-
+	old_oom_score_adj = task->signal->oom_score_adj;
 	task->signal->oom_score_adj = oom_adj;
+#ifdef CONFIG_OOM_SCORE_NOTIFIER
+	err = oom_score_notify_update(task, old_oom_score_adj);
+	if (err) {
+		/* rollback and error handle. */
+		task->signal->oom_score_adj = old_oom_score_adj;
+		goto err_sighand;
+	}
+#endif
 	trace_oom_score_adj_update(task);
 err_sighand:
 	unlock_task_sighand(task, &flags);
@@ -1189,6 +1204,7 @@ static ssize_t oom_score_adj_write(struct file *file, const char __user *buf,
 	unsigned long flags;
 	int oom_score_adj;
 	int err;
+	int old_oom_score_adj;
 
 	memset(buffer, 0, sizeof(buffer));
 	if (count > sizeof(buffer) - 1)
@@ -1230,7 +1246,16 @@ static ssize_t oom_score_adj_write(struct file *file, const char __user *buf,
 		goto err_sighand;
 	}
 
+	old_oom_score_adj = task->signal->oom_score_adj;
 	task->signal->oom_score_adj = (short)oom_score_adj;
+#ifdef CONFIG_OOM_SCORE_NOTIFIER
+	err = oom_score_notify_update(task, old_oom_score_adj);
+	if (err) {
+		/* rollback and error handle. */
+		task->signal->oom_score_adj = old_oom_score_adj;
+		goto err_sighand;
+	}
+#endif
 	if (has_capability_noaudit(current, CAP_SYS_RESOURCE))
 		task->signal->oom_score_adj_min = (short)oom_score_adj;
 	trace_oom_score_adj_update(task);
@@ -2674,13 +2699,6 @@ out:
 }
 
 #ifdef CONFIG_SECURITY
-static int proc_pid_attr_open(struct inode *inode, struct file *file)
-{
-	file->private_data = NULL;
-	__mem_open(inode, file, PTRACE_MODE_READ_FSCREDS);
-	return 0;
-}
-
 static ssize_t proc_pid_attr_read(struct file * file, char __user * buf,
 				  size_t count, loff_t *ppos)
 {
@@ -2709,10 +2727,6 @@ static ssize_t proc_pid_attr_write(struct file * file, const char __user * buf,
 	char *page;
 	ssize_t length;
 	struct task_struct *task = get_proc_task(inode);
-
-	/* A task may only write when it was the opener. */
-	if (file->private_data != current->mm)
-		return -EPERM;
 
 	length = -ESRCH;
 	if (!task)
@@ -2752,11 +2766,9 @@ out_no_task:
 }
 
 static const struct file_operations proc_pid_attr_operations = {
-	.open		= proc_pid_attr_open,
 	.read		= proc_pid_attr_read,
 	.write		= proc_pid_attr_write,
 	.llseek		= generic_file_llseek,
-	.release	= mem_release,
 };
 
 static const struct pid_entry attr_dir_stuff[] = {
@@ -3132,7 +3144,6 @@ static const struct pid_entry tgid_base_stuff[] = {
 #ifdef CONFIG_PROC_PAGE_MONITOR
 	REG("clear_refs", S_IWUSR, proc_clear_refs_operations),
 	REG("smaps",      S_IRUGO, proc_pid_smaps_operations),
-	REG("smaps_rollup", S_IRUGO, proc_pid_smaps_rollup_operations),
 	REG("pagemap",    S_IRUSR, proc_pagemap_operations),
 #endif
 #ifdef CONFIG_SECURITY
@@ -3201,15 +3212,6 @@ static const struct file_operations proc_tgid_base_operations = {
 	.iterate	= proc_tgid_base_readdir,
 	.llseek		= default_llseek,
 };
-
-struct pid *tgid_pidfd_to_pid(const struct file *file)
-{
-	if (!d_is_dir(file->f_path.dentry) ||
-	    (file->f_op != &proc_tgid_base_operations))
-		return ERR_PTR(-EBADF);
-
-	return proc_pid(file_inode(file));
-}
 
 static struct dentry *proc_tgid_base_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
 {
@@ -3536,7 +3538,6 @@ static const struct pid_entry tid_base_stuff[] = {
 #ifdef CONFIG_PROC_PAGE_MONITOR
 	REG("clear_refs", S_IWUSR, proc_clear_refs_operations),
 	REG("smaps",     S_IRUGO, proc_tid_smaps_operations),
-	REG("smaps_rollup", S_IRUGO, proc_pid_smaps_rollup_operations),
 	REG("pagemap",    S_IRUSR, proc_pagemap_operations),
 #endif
 #ifdef CONFIG_SECURITY

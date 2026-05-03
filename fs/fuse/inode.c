@@ -5,6 +5,11 @@
   This program can be distributed under the terms of the GNU GPL.
   See the file COPYING.
 */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2013 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #include "fuse_i.h"
 
@@ -29,7 +34,7 @@ static struct kmem_cache *fuse_inode_cachep;
 struct list_head fuse_conn_list;
 DEFINE_MUTEX(fuse_mutex);
 
-static int set_global_limit(const char *val, const struct kernel_param *kp);
+static int set_global_limit(const char *val, struct kernel_param *kp);
 
 unsigned max_user_bgreq;
 module_param_call(max_user_bgreq, set_global_limit, param_get_uint,
@@ -435,6 +440,7 @@ enum {
 	OPT_GROUP_ID,
 	OPT_DEFAULT_PERMISSIONS,
 	OPT_ALLOW_OTHER,
+	OPT_ALLOW_UTIME_GRP,
 	OPT_MAX_READ,
 	OPT_BLKSIZE,
 	OPT_ERR
@@ -447,6 +453,7 @@ static const match_table_t tokens = {
 	{OPT_GROUP_ID,			"group_id=%u"},
 	{OPT_DEFAULT_PERMISSIONS,	"default_permissions"},
 	{OPT_ALLOW_OTHER,		"allow_other"},
+	{OPT_ALLOW_UTIME_GRP,		"allow_utime_grp"},
 	{OPT_MAX_READ,			"max_read=%u"},
 	{OPT_BLKSIZE,			"blksize=%u"},
 	{OPT_ERR,			NULL}
@@ -522,6 +529,10 @@ static int parse_fuse_opt(char *opt, struct fuse_mount_data *d, int is_bdev)
 			d->flags |= FUSE_ALLOW_OTHER;
 			break;
 
+		case OPT_ALLOW_UTIME_GRP:
+			d->flags |= FUSE_ALLOW_UTIME_GRP;
+			break;
+
 		case OPT_MAX_READ:
 			if (match_int(&args[0], &value))
 				return 0;
@@ -557,6 +568,8 @@ static int fuse_show_options(struct seq_file *m, struct dentry *root)
 		seq_puts(m, ",default_permissions");
 	if (fc->flags & FUSE_ALLOW_OTHER)
 		seq_puts(m, ",allow_other");
+	if (fc->flags & FUSE_ALLOW_UTIME_GRP)
+		seq_puts(m, ",allow_utime_grp");
 	if (fc->max_read != ~0)
 		seq_printf(m, ",max_read=%u", fc->max_read);
 	if (sb->s_bdev && sb->s_blocksize != FUSE_DEFAULT_BLKSIZE)
@@ -811,7 +824,7 @@ static void sanitize_global_limit(unsigned *limit)
 		*limit = (1 << 16) - 1;
 }
 
-static int set_global_limit(const char *val, const struct kernel_param *kp)
+static int set_global_limit(const char *val, struct kernel_param *kp)
 {
 	int rv;
 

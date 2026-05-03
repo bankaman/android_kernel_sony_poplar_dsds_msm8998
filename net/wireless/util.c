@@ -48,7 +48,7 @@ u32 ieee80211_mandatory_rates(struct ieee80211_supported_band *sband,
 	if (WARN_ON(!sband))
 		return 1;
 
-	if (sband->band == NL80211_BAND_2GHZ) {
+	if (sband->band == IEEE80211_BAND_2GHZ) {
 		if (scan_width == NL80211_BSS_CHAN_WIDTH_5 ||
 		    scan_width == NL80211_BSS_CHAN_WIDTH_10)
 			mandatory_flag = IEEE80211_RATE_MANDATORY_G;
@@ -66,26 +66,26 @@ u32 ieee80211_mandatory_rates(struct ieee80211_supported_band *sband,
 }
 EXPORT_SYMBOL(ieee80211_mandatory_rates);
 
-int ieee80211_channel_to_frequency(int chan, enum nl80211_band band)
+int ieee80211_channel_to_frequency(int chan, enum ieee80211_band band)
 {
 	/* see 802.11 17.3.8.3.2 and Annex J
 	 * there are overlapping channel numbers in 5GHz and 2GHz bands */
 	if (chan <= 0)
 		return 0; /* not supported */
 	switch (band) {
-	case NL80211_BAND_2GHZ:
+	case IEEE80211_BAND_2GHZ:
 		if (chan == 14)
 			return 2484;
 		else if (chan < 14)
 			return 2407 + chan * 5;
 		break;
-	case NL80211_BAND_5GHZ:
+	case IEEE80211_BAND_5GHZ:
 		if (chan >= 182 && chan <= 196)
 			return 4000 + chan * 5;
 		else
 			return 5000 + chan * 5;
 		break;
-	case NL80211_BAND_60GHZ:
+	case IEEE80211_BAND_60GHZ:
 		if (chan < 5)
 			return 56160 + chan * 2160;
 		break;
@@ -117,11 +117,11 @@ EXPORT_SYMBOL(ieee80211_frequency_to_channel);
 struct ieee80211_channel *__ieee80211_get_channel(struct wiphy *wiphy,
 						  int freq)
 {
-	enum nl80211_band band;
+	enum ieee80211_band band;
 	struct ieee80211_supported_band *sband;
 	int i;
 
-	for (band = 0; band < NUM_NL80211_BANDS; band++) {
+	for (band = 0; band < IEEE80211_NUM_BANDS; band++) {
 		sband = wiphy->bands[band];
 
 		if (!sband)
@@ -138,12 +138,12 @@ struct ieee80211_channel *__ieee80211_get_channel(struct wiphy *wiphy,
 EXPORT_SYMBOL(__ieee80211_get_channel);
 
 static void set_mandatory_flags_band(struct ieee80211_supported_band *sband,
-				     enum nl80211_band band)
+				     enum ieee80211_band band)
 {
 	int i, want;
 
 	switch (band) {
-	case NL80211_BAND_5GHZ:
+	case IEEE80211_BAND_5GHZ:
 		want = 3;
 		for (i = 0; i < sband->n_bitrates; i++) {
 			if (sband->bitrates[i].bitrate == 60 ||
@@ -156,7 +156,7 @@ static void set_mandatory_flags_band(struct ieee80211_supported_band *sband,
 		}
 		WARN_ON(want);
 		break;
-	case NL80211_BAND_2GHZ:
+	case IEEE80211_BAND_2GHZ:
 		want = 7;
 		for (i = 0; i < sband->n_bitrates; i++) {
 			if (sband->bitrates[i].bitrate == 10) {
@@ -186,12 +186,12 @@ static void set_mandatory_flags_band(struct ieee80211_supported_band *sband,
 		}
 		WARN_ON(want != 0 && want != 3 && want != 6);
 		break;
-	case NL80211_BAND_60GHZ:
+	case IEEE80211_BAND_60GHZ:
 		/* check for mandatory HT MCS 1..4 */
 		WARN_ON(!sband->ht_cap.ht_supported);
 		WARN_ON((sband->ht_cap.mcs.rx_mask[0] & 0x1e) != 0x1e);
 		break;
-	case NUM_NL80211_BANDS:
+	case IEEE80211_NUM_BANDS:
 		WARN_ON(1);
 		break;
 	}
@@ -199,9 +199,9 @@ static void set_mandatory_flags_band(struct ieee80211_supported_band *sband,
 
 void ieee80211_set_bitrate_flags(struct wiphy *wiphy)
 {
-	enum nl80211_band band;
+	enum ieee80211_band band;
 
-	for (band = 0; band < NUM_NL80211_BANDS; band++)
+	for (band = 0; band < IEEE80211_NUM_BANDS; band++)
 		if (wiphy->bands[band])
 			set_mandatory_flags_band(wiphy->bands[band], band);
 }
@@ -410,8 +410,8 @@ unsigned int ieee80211_get_mesh_hdrlen(struct ieee80211s_hdr *meshhdr)
 }
 EXPORT_SYMBOL(ieee80211_get_mesh_hdrlen);
 
-static int __ieee80211_data_to_8023(struct sk_buff *skb, const u8 *addr,
-				    enum nl80211_iftype iftype, bool is_amsdu)
+int ieee80211_data_to_8023(struct sk_buff *skb, const u8 *addr,
+			   enum nl80211_iftype iftype)
 {
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *) skb->data;
 	u16 hdrlen, ethertype;
@@ -505,7 +505,7 @@ static int __ieee80211_data_to_8023(struct sk_buff *skb, const u8 *addr,
 	payload = skb->data + hdrlen;
 	ethertype = (payload[6] << 8) | payload[7];
 
-	if (likely((!is_amsdu && ether_addr_equal(payload, rfc1042_header) &&
+	if (likely((ether_addr_equal(payload, rfc1042_header) &&
 		    ethertype != ETH_P_AARP && ethertype != ETH_P_IPX) ||
 		   ether_addr_equal(payload, bridge_tunnel_header))) {
 		/* remove RFC1042 or Bridge-Tunnel encapsulation and
@@ -525,12 +525,6 @@ static int __ieee80211_data_to_8023(struct sk_buff *skb, const u8 *addr,
 		ehdr->h_proto = len;
 	}
 	return 0;
-}
-
-int ieee80211_data_to_8023(struct sk_buff *skb, const u8 *addr,
-			   enum nl80211_iftype iftype)
-{
-	return __ieee80211_data_to_8023(skb, addr, iftype, false);
 }
 EXPORT_SYMBOL(ieee80211_data_to_8023);
 
@@ -597,7 +591,6 @@ int ieee80211_data_from_8023(struct sk_buff *skb, const u8 *addr,
 	hdr.frame_control = fc;
 	hdr.duration_id = 0;
 	hdr.seq_ctrl = 0;
-	eth_zero_addr(hdr.addr4);
 
 	skip_header_bytes = ETH_HLEN;
 	if (ethertype == ETH_P_AARP || ethertype == ETH_P_IPX) {
@@ -690,9 +683,6 @@ void ieee80211_amsdu_to_8023s(struct sk_buff *skb, struct sk_buff_head *list,
 		padding = (4 - subframe_len) & 0x3;
 		/* the last MSDU has no padding */
 		if (subframe_len > remaining)
-			goto purge;
-		/* mitigate A-MSDU aggregation injection attacks */
-		if (ether_addr_equal(eth->h_dest, rfc1042_header))
 			goto purge;
 
 		skb_pull(skb, sizeof(struct ethhdr));
@@ -959,7 +949,6 @@ int cfg80211_change_iface(struct cfg80211_registered_device *rdev,
 
 		switch (otype) {
 		case NL80211_IFTYPE_AP:
-		case NL80211_IFTYPE_P2P_GO:
 			cfg80211_stop_ap(rdev, dev, true);
 			break;
 		case NL80211_IFTYPE_ADHOC:
@@ -974,9 +963,6 @@ int cfg80211_change_iface(struct cfg80211_registered_device *rdev,
 			break;
 		case NL80211_IFTYPE_MESH_POINT:
 			/* mesh should be handled? */
-			break;
-		case NL80211_IFTYPE_OCB:
-			cfg80211_leave_ocb(rdev, dev);
 			break;
 		default:
 			break;
@@ -1343,22 +1329,22 @@ size_t ieee80211_ie_split(const u8 *ies, size_t ielen,
 EXPORT_SYMBOL(ieee80211_ie_split);
 
 bool ieee80211_operating_class_to_band(u8 operating_class,
-				       enum nl80211_band *band)
+				       enum ieee80211_band *band)
 {
 	switch (operating_class) {
 	case 112:
 	case 115 ... 127:
 	case 128 ... 130:
-		*band = NL80211_BAND_5GHZ;
+		*band = IEEE80211_BAND_5GHZ;
 		return true;
 	case 81:
 	case 82:
 	case 83:
 	case 84:
-		*band = NL80211_BAND_2GHZ;
+		*band = IEEE80211_BAND_2GHZ;
 		return true;
 	case 180:
-		*band = NL80211_BAND_60GHZ;
+		*band = IEEE80211_BAND_60GHZ;
 		return true;
 	}
 
@@ -1831,10 +1817,10 @@ int ieee80211_get_ratemask(struct ieee80211_supported_band *sband,
 
 unsigned int ieee80211_get_num_supported_channels(struct wiphy *wiphy)
 {
-	enum nl80211_band band;
+	enum ieee80211_band band;
 	unsigned int n_channels = 0;
 
-	for (band = 0; band < NUM_NL80211_BANDS; band++)
+	for (band = 0; band < IEEE80211_NUM_BANDS; band++)
 		if (wiphy->bands[band])
 			n_channels += wiphy->bands[band]->n_channels;
 

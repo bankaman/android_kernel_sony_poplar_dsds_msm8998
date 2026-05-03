@@ -19,7 +19,6 @@ obj-$(CONFIG_TIFM_CORE)       	+= tifm_core.o
 obj-$(CONFIG_TIFM_7XX1)       	+= tifm_7xx1.o
 obj-$(CONFIG_PHANTOM)		+= phantom.o
 obj-$(CONFIG_NFC_PN553_DEVICES) += pn553.o
-obj-$(CONFIG_NFC_CARILLON)	+= carillon/
 obj-$(CONFIG_QCOM_COINCELL)	+= qcom-coincell.o
 obj-$(CONFIG_SENSORS_BH1780)	+= bh1780gli.o
 obj-$(CONFIG_SENSORS_BH1770)	+= bh1770glc.o
@@ -38,6 +37,7 @@ obj-$(CONFIG_ISL29020)		+= isl29020.o
 obj-$(CONFIG_SENSORS_TSL2550)	+= tsl2550.o
 obj-$(CONFIG_DS1682)		+= ds1682.o
 obj-$(CONFIG_TI_DAC7512)	+= ti_dac7512.o
+obj-$(CONFIG_UID_STAT)		+= uid_stat.o
 obj-$(CONFIG_C2PORT)		+= c2port/
 obj-$(CONFIG_HMC6352)		+= hmc6352.o
 obj-y				+= eeprom/
@@ -79,6 +79,3 @@ obj-$(CONFIG_RAMDUMP_MEMDESC) += ramdump_mem_desc.o
 obj-$(CONFIG_POWERKEY_FORCECRASH) += powerkey_forcecrash.o
 obj-$(CONFIG_MMTUNER_MN8855x) += mm_tuner/
 obj-$(CONFIG_ONESEG_TUNER_SMTVJ19X) += oneseg_tuner_drv.o
-
-subdir-ccflags-y += \
-	-Wno-enum-conversion

@@ -1169,14 +1169,15 @@ static void ehea_parse_eqe(struct ehea_adapter *adapter, u64 eqe)
 	ec = EHEA_BMASK_GET(NEQE_EVENT_CODE, eqe);
 	portnum = EHEA_BMASK_GET(NEQE_PORTNUM, eqe);
 	port = ehea_get_port(adapter, portnum);
-	if (!port) {
-		netdev_err(NULL, "unknown portnum %x\n", portnum);
-		return;
-	}
 	dev = port->netdev;
 
 	switch (ec) {
 	case EHEA_EC_PORTSTATE_CHG:	/* port state change */
+
+		if (!port) {
+			netdev_err(dev, "unknown portnum %x\n", portnum);
+			break;
+		}
 
 		if (EHEA_BMASK_GET(NEQE_PORT_UP, eqe)) {
 			if (!netif_carrier_ok(dev)) {
@@ -2654,8 +2655,10 @@ static int ehea_restart_qps(struct net_device *dev)
 	u16 dummy16 = 0;
 
 	cb0 = (void *)get_zeroed_page(GFP_KERNEL);
-	if (!cb0)
-		return -ENOMEM;
+	if (!cb0) {
+		ret = -ENOMEM;
+		goto out;
+	}
 
 	for (i = 0; i < (port->num_def_qps); i++) {
 		struct ehea_port_res *pr =  &port->port_res[i];
@@ -2675,7 +2678,6 @@ static int ehea_restart_qps(struct net_device *dev)
 					    cb0);
 		if (hret != H_SUCCESS) {
 			netdev_err(dev, "query_ehea_qp failed (1)\n");
-			ret = -EFAULT;
 			goto out;
 		}
 
@@ -2688,7 +2690,6 @@ static int ehea_restart_qps(struct net_device *dev)
 					     &dummy64, &dummy16, &dummy16);
 		if (hret != H_SUCCESS) {
 			netdev_err(dev, "modify_ehea_qp failed (1)\n");
-			ret = -EFAULT;
 			goto out;
 		}
 
@@ -2697,7 +2698,6 @@ static int ehea_restart_qps(struct net_device *dev)
 					    cb0);
 		if (hret != H_SUCCESS) {
 			netdev_err(dev, "query_ehea_qp failed (2)\n");
-			ret = -EFAULT;
 			goto out;
 		}
 

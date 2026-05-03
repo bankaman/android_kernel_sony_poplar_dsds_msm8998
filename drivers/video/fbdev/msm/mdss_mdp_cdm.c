@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, 2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -139,9 +139,7 @@ static int mdss_mdp_cdm_csc_setup(struct mdss_mdp_cdm *cdm,
 	if ((data->csc_type == MDSS_MDP_CSC_RGB2YUV_601L) ||
 		(data->csc_type == MDSS_MDP_CSC_RGB2YUV_601FR) ||
 		(data->csc_type == MDSS_MDP_CSC_RGB2YUV_709L) ||
-		(data->csc_type == MDSS_MDP_CSC_RGB2YUV_709FR) ||
-		(data->csc_type == MDSS_MDP_CSC_RGB2YUV_2020L) ||
-		(data->csc_type == MDSS_MDP_CSC_RGB2YUV_2020FR)) {
+		(data->csc_type == MDSS_MDP_CSC_RGB2YUV_709FR)) {
 		op_mode |= BIT(2);  /* DST_DATA_FORMAT = YUV */
 		op_mode &= ~BIT(1); /* SRC_DATA_FORMAT = RGB */
 		op_mode |= BIT(0);  /* EN = 1 */

@@ -1008,7 +1008,8 @@ int do_settimeofday64(const struct timespec64 *ts)
 	timekeeping_forward_now(tk);
 
 	xt = tk_xtime(tk);
-	ts_delta = timespec64_sub(*ts, xt);
+	ts_delta.tv_sec = ts->tv_sec - xt.tv_sec;
+	ts_delta.tv_nsec = ts->tv_nsec - xt.tv_nsec;
 
 	if (timespec64_compare(&tk->wall_to_monotonic, &ts_delta) > 0) {
 		ret = -EINVAL;
@@ -1681,12 +1682,9 @@ static __always_inline void timekeeping_freqadjust(struct timekeeper *tk,
 {
 	s64 interval = tk->cycle_interval;
 	s64 xinterval = tk->xtime_interval;
-	u32 base = tk->tkr_mono.clock->mult;
-	u32 max = tk->tkr_mono.clock->maxadj;
-	u32 cur_adj = tk->tkr_mono.mult;
 	s64 tick_error;
 	bool negative;
-	u32 adj_scale;
+	u32 adj;
 
 	/* Remove any current error adj from freq calculation */
 	if (tk->ntp_err_mult)
@@ -1705,33 +1703,13 @@ static __always_inline void timekeeping_freqadjust(struct timekeeper *tk,
 	/* preserve the direction of correction */
 	negative = (tick_error < 0);
 
-	/* If any adjustment would pass the max, just return */
-	if (negative && (cur_adj - 1) <= (base - max))
-		return;
-	if (!negative && (cur_adj + 1) >= (base + max))
-		return;
-	/*
-	 * Sort out the magnitude of the correction, but
-	 * avoid making so large a correction that we go
-	 * over the max adjustment.
-	 */
-	adj_scale = 0;
+	/* Sort out the magnitude of the correction */
 	tick_error = abs(tick_error);
-	while (tick_error > interval) {
-		u32 adj = 1 << (adj_scale + 1);
-
-		/* Check if adjustment gets us within 1 unit from the max */
-		if (negative && (cur_adj - adj) <= (base - max))
-			break;
-		if (!negative && (cur_adj + adj) >= (base + max))
-			break;
-
-		adj_scale++;
+	for (adj = 0; tick_error > interval; adj++)
 		tick_error >>= 1;
-	}
 
 	/* scale the corrections */
-	timekeeping_apply_adjustment(tk, offset, negative, adj_scale);
+	timekeeping_apply_adjustment(tk, offset, negative, adj);
 }
 
 /*

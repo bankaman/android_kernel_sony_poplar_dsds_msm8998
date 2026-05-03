@@ -803,15 +803,13 @@ static void mkiss_close(struct tty_struct *tty)
 	 */
 	netif_stop_queue(ax->dev);
 
-	unregister_netdev(ax->dev);
-
-	/* Free all AX25 frame buffers after unreg. */
+	/* Free all AX25 frame buffers. */
 	kfree(ax->rbuff);
 	kfree(ax->xbuff);
 
 	ax->tty = NULL;
 
-	free_netdev(ax->dev);
+	unregister_netdev(ax->dev);
 }
 
 /* Perform I/O control on an active ax25 channel. */

@@ -315,11 +315,8 @@ int usb_function_deactivate(struct usb_function *function)
 
 	spin_lock_irqsave(&cdev->lock, flags);
 
-	if (cdev->deactivations == 0) {
-		spin_unlock_irqrestore(&cdev->lock, flags);
+	if (cdev->deactivations == 0)
 		status = usb_gadget_deactivate(cdev->gadget);
-		spin_lock_irqsave(&cdev->lock, flags);
-	}
 	if (status == 0)
 		cdev->deactivations++;
 
@@ -350,11 +347,8 @@ int usb_function_activate(struct usb_function *function)
 		status = -EINVAL;
 	else {
 		cdev->deactivations--;
-		if (cdev->deactivations == 0) {
-			spin_unlock_irqrestore(&cdev->lock, flags);
+		if (cdev->deactivations == 0)
 			status = usb_gadget_activate(cdev->gadget);
-			spin_lock_irqsave(&cdev->lock, flags);
-		}
 	}
 
 	spin_unlock_irqrestore(&cdev->lock, flags);
@@ -496,19 +490,14 @@ done:
 static u8 encode_bMaxPower(enum usb_device_speed speed,
 		struct usb_configuration *c)
 {
-	unsigned val = c->MaxPower;
+	unsigned val = CONFIG_USB_GADGET_VBUS_DRAW;
 
 	switch (speed) {
 	case USB_SPEED_SUPER:
-		/* with super-speed report 900mA if user hasn't specified */
-		if (!val)
-			val = SSUSB_GADGET_VBUS_DRAW;
-
+		/* with super-speed report 900mA */
+		val = SSUSB_GADGET_VBUS_DRAW;
 		return (u8)(val / SSUSB_GADGET_VBUS_DRAW_UNITS);
 	default:
-		if (!val)
-			val = CONFIG_USB_GADGET_VBUS_DRAW;
-
 		return DIV_ROUND_UP(val, HSUSB_GADGET_VBUS_DRAW_UNITS);
 	}
 }
@@ -900,11 +889,6 @@ static int set_config(struct usb_composite_dev *cdev,
 	}
 
 done:
-	if (USB_VBUS_DRAW(gadget->speed) <= USB_SELF_POWER_VBUS_MAX_DRAW)
-		usb_gadget_set_selfpowered(gadget);
-	else
-		usb_gadget_clear_selfpowered(gadget);
-
 	usb_gadget_vbus_draw(gadget, USB_VBUS_DRAW(gadget->speed));
 	if (result >= 0 && cdev->delayed_status)
 		result = USB_GADGET_DELAYED_STATUS;
@@ -1083,7 +1067,7 @@ static void collect_langs(struct usb_gadget_strings **sp, __le16 *buf)
 	while (*sp) {
 		s = *sp;
 		language = cpu_to_le16(s->language);
-		for (tmp = buf; *tmp && tmp < &buf[USB_MAX_STRING_LEN]; tmp++) {
+		for (tmp = buf; *tmp && tmp < &buf[126]; tmp++) {
 			if (*tmp == language)
 				goto repeat;
 		}
@@ -1158,7 +1142,7 @@ static int get_string(struct usb_composite_dev *cdev,
 			collect_langs(sp, s->wData);
 		}
 
-		for (len = 0; len <= USB_MAX_STRING_LEN && s->wData[len]; len++)
+		for (len = 0; len <= 126 && s->wData[len]; len++)
 			continue;
 		if (!len)
 			return -EINVAL;
@@ -1634,18 +1618,6 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 	struct usb_function		*f = NULL;
 	u8				endp;
 
-	if (w_length > USB_COMP_EP0_BUFSIZ) {
-		if (ctrl->bRequestType & USB_DIR_IN) {
-			/* Cast away the const, we are going to overwrite on purpose. */
-			__le16 *temp = (__le16 *)&ctrl->wLength;
-
-			*temp = cpu_to_le16(USB_COMP_EP0_BUFSIZ);
-			w_length = USB_COMP_EP0_BUFSIZ;
-		} else {
-			goto done;
-		}
-	}
-
 	/* partial re-init of the response message; the function or the
 	 * gadget might need to intercept e.g. a control-OUT completion
 	 * when we delegate to it.
@@ -1946,9 +1918,6 @@ unknown:
 				if (w_index != 0x5 || (w_value >> 8))
 					break;
 				interface = w_value & 0xFF;
-				if (interface >= MAX_CONFIG_INTERFACES ||
-				    !os_desc_cfg->interface[interface])
-					break;
 				buf[6] = w_index;
 				if (w_length == 0x0A) {
 					count = count_ext_prop(os_desc_cfg,
@@ -2222,7 +2191,7 @@ int composite_dev_prepare(struct usb_composite_driver *composite,
 	if (!cdev->req)
 		return -ENOMEM;
 
-	cdev->req->buf = kzalloc(USB_COMP_EP0_BUFSIZ, GFP_KERNEL);
+	cdev->req->buf = kmalloc(USB_COMP_EP0_BUFSIZ, GFP_KERNEL);
 	if (!cdev->req->buf)
 		goto fail;
 
@@ -2386,7 +2355,6 @@ void composite_suspend(struct usb_gadget *gadget)
 	cdev->suspended = 1;
 	spin_unlock_irqrestore(&cdev->lock, flags);
 
-	usb_gadget_set_selfpowered(gadget);
 	usb_gadget_vbus_draw(gadget, 2);
 }
 
@@ -2425,9 +2393,6 @@ void composite_resume(struct usb_gadget *gadget)
 			if (f->resume)
 				f->resume(f);
 		}
-
-		if (USB_VBUS_DRAW(gadget->speed) > USB_SELF_POWER_VBUS_MAX_DRAW)
-			usb_gadget_clear_selfpowered(gadget);
 
 		usb_gadget_vbus_draw(gadget, USB_VBUS_DRAW(gadget->speed));
 	}

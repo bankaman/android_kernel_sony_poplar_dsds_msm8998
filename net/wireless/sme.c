@@ -106,7 +106,7 @@ static int cfg80211_conn_scan(struct wireless_dev *wdev)
 		return -ENOMEM;
 
 	if (wdev->conn->params.channel) {
-		enum nl80211_band band = wdev->conn->params.channel->band;
+		enum ieee80211_band band = wdev->conn->params.channel->band;
 		struct ieee80211_supported_band *sband =
 			wdev->wiphy->bands[band];
 
@@ -118,11 +118,11 @@ static int cfg80211_conn_scan(struct wireless_dev *wdev)
 		request->rates[band] = (1 << sband->n_bitrates) - 1;
 	} else {
 		int i = 0, j;
-		enum nl80211_band band;
+		enum ieee80211_band band;
 		struct ieee80211_supported_band *bands;
 		struct ieee80211_channel *channel;
 
-		for (band = 0; band < NUM_NL80211_BANDS; band++) {
+		for (band = 0; band < IEEE80211_NUM_BANDS; band++) {
 			bands = wdev->wiphy->bands[band];
 			if (!bands)
 				continue;
@@ -290,15 +290,6 @@ void cfg80211_conn_work(struct work_struct *work)
 	rtnl_unlock();
 }
 
-static void cfg80211_step_auth_next(struct cfg80211_conn *conn,
-				    struct cfg80211_bss *bss)
-{
-	memcpy(conn->bssid, bss->bssid, ETH_ALEN);
-	conn->params.bssid = conn->bssid;
-	conn->params.channel = bss->channel;
-	conn->state = CFG80211_CONN_AUTHENTICATE_NEXT;
-}
-
 /* Returned bss is reference counted and must be cleaned up appropriately. */
 static struct cfg80211_bss *cfg80211_get_conn_bss(struct wireless_dev *wdev)
 {
@@ -316,7 +307,10 @@ static struct cfg80211_bss *cfg80211_get_conn_bss(struct wireless_dev *wdev)
 	if (!bss)
 		return NULL;
 
-	cfg80211_step_auth_next(wdev->conn, bss);
+	memcpy(wdev->conn->bssid, bss->bssid, ETH_ALEN);
+	wdev->conn->params.bssid = wdev->conn->bssid;
+	wdev->conn->params.channel = bss->channel;
+	wdev->conn->state = CFG80211_CONN_AUTHENTICATE_NEXT;
 	schedule_work(&rdev->conn_work);
 
 	return bss;
@@ -504,7 +498,7 @@ static int cfg80211_sme_get_conn_ies(struct wireless_dev *wdev,
 	if (!buf)
 		return -ENOMEM;
 
-	if (ies_len && ies) {
+	if (ies_len) {
 		static const u8 before_extcapa[] = {
 			/* not listing IEs expected to be created by driver */
 			WLAN_EID_RSN,
@@ -552,7 +546,7 @@ static int cfg80211_sme_connect(struct wireless_dev *wdev,
 	if (wdev->current_bss)
 		return -EALREADY;
 
-	if (wdev->conn)
+	if (WARN_ON(wdev->conn))
 		return -EINPROGRESS;
 
 	wdev->conn = kzalloc(sizeof(*wdev->conn), GFP_KERNEL);
@@ -590,12 +584,7 @@ static int cfg80211_sme_connect(struct wireless_dev *wdev,
 	wdev->conn->params.ssid_len = wdev->ssid_len;
 
 	/* see if we have the bss already */
-	bss = cfg80211_get_bss(wdev->wiphy, wdev->conn->params.channel,
-			       wdev->conn->params.bssid,
-			       wdev->conn->params.ssid,
-			       wdev->conn->params.ssid_len,
-			       wdev->conn_bss_type,
-			       IEEE80211_PRIVACY(wdev->conn->params.privacy));
+	bss = cfg80211_get_conn_bss(wdev);
 
 	if (prev_bssid) {
 		memcpy(wdev->conn->prev_bssid, prev_bssid, ETH_ALEN);
@@ -606,7 +595,6 @@ static int cfg80211_sme_connect(struct wireless_dev *wdev,
 	if (bss) {
 		enum nl80211_timeout_reason treason;
 
-		cfg80211_step_auth_next(wdev->conn, bss);
 		err = cfg80211_conn_do_work(wdev, &treason);
 		cfg80211_put_bss(wdev->wiphy, bss);
 	} else {
@@ -1128,18 +1116,6 @@ int cfg80211_connect(struct cfg80211_registered_device *rdev,
 				connect->crypto.ciphers_pairwise[0] = cipher;
 			}
 		}
-	} else {
-		if (WARN_ON(connkeys))
-			return -EINVAL;
-
-		/* connect can point to wdev->wext.connect which
-		 * can hold key data from a previous connection
-		 */
-		connect->key = NULL;
-		connect->key_len = 0;
-		connect->key_idx = 0;
-		connect->crypto.cipher_group = 0;
-		connect->crypto.n_ciphers_pairwise = 0;
 	}
 
 	wdev->connect_keys = connkeys;

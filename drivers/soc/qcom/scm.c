@@ -194,9 +194,9 @@ static int scm_remap_error(int err)
 static u32 smc(u32 cmd_addr)
 {
 	int context_id;
-	register u32 r0 asm(R0_STR) = 1;
-	register u32 r1 asm(R1_STR) = (uintptr_t)&context_id;
-	register u32 r2 asm(R2_STR) = cmd_addr;
+	register u32 r0 asm("r0") = 1;
+	register u32 r1 asm("r1") = (uintptr_t)&context_id;
+	register u32 r2 asm("r2") = cmd_addr;
 	do {
 		asm volatile(
 			__asmeq("%0", R0_STR)
