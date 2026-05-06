@@ -1738,8 +1738,8 @@ static unsigned int cpe_err_status_poll(struct file *filp,
 
 	if (ssr_entry->err_data_ready)
 		mask |= (POLLIN | POLLRDNORM);
-	poll_wait(filp, &ssr_entry->err_status_debug_q, wait);
 
+	poll_wait(filp, &ssr_entry->err_status_debug_q, wait);
 	return mask;
 }
 

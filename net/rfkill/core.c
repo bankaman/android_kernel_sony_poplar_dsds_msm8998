@@ -16,6 +16,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2012 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -936,13 +941,10 @@ static void rfkill_sync_work(struct work_struct *work)
 int __must_check rfkill_register(struct rfkill *rfkill)
 {
 	static unsigned long rfkill_no;
-	struct device *dev;
+	struct device *dev = &rfkill->dev;
 	int error;
 
-	if (!rfkill)
-		return -EINVAL;
-
-	dev = &rfkill->dev;
+	BUG_ON(!rfkill);
 
 	mutex_lock(&rfkill_global_mutex);
 

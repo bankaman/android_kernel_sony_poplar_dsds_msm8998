@@ -8,6 +8,11 @@
  * (C) 2007 SGI, Christoph Lameter
  * (C) 2011 Linux Foundation, Christoph Lameter
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2013 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #include <linux/mm.h>
 #include <linux/swap.h> /* struct reclaim_state */
@@ -1725,7 +1730,7 @@ static void *get_partial_node(struct kmem_cache *s, struct kmem_cache_node *n,
 {
 	struct page *page, *page2;
 	void *object = NULL;
-	unsigned int available = 0;
+	int available = 0;
 	int objects;
 
 	/*
@@ -4653,17 +4658,7 @@ static ssize_t show_slab_objects(struct kmem_cache *s,
 		}
 	}
 
-	/*
-	 * It is impossible to take "mem_hotplug_lock" here with "kernfs_mutex"
-	 * already held which will conflict with an existing lock order:
-	 *
-	 * mem_hotplug_lock->slab_mutex->kernfs_mutex
-	 *
-	 * We don't really need mem_hotplug_lock (to hold off
-	 * slab_mem_going_offline_callback) here because slab's memory hot
-	 * unplug code doesn't destroy the kmem_cache->node[] data.
-	 */
-
+	get_online_mems();
 #ifdef CONFIG_SLUB_DEBUG
 	if (flags & SO_ALL) {
 		struct kmem_cache_node *n;
@@ -4704,6 +4699,7 @@ static ssize_t show_slab_objects(struct kmem_cache *s,
 			x += sprintf(buf + x, " N%d=%lu",
 					node, nodes[node]);
 #endif
+	put_online_mems();
 	kfree(nodes);
 	return x + sprintf(buf + x, "\n");
 }
@@ -4814,10 +4810,10 @@ static ssize_t cpu_partial_show(struct kmem_cache *s, char *buf)
 static ssize_t cpu_partial_store(struct kmem_cache *s, const char *buf,
 				 size_t length)
 {
-	unsigned int objects;
+	unsigned long objects;
 	int err;
 
-	err = kstrtouint(buf, 10, &objects);
+	err = kstrtoul(buf, 10, &objects);
 	if (err)
 		return err;
 	if (objects && !kmem_cache_has_cpu_partial(s))

@@ -18,6 +18,11 @@
  *
  * Authors: Wu Fengguang <fengguang.wu@intel.com>
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2015 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #define _FILE_OFFSET_BITS 64
 #define _GNU_SOURCE
@@ -149,6 +154,12 @@ static const char * const page_flag_names[] = {
 	[KPF_MMAP_EXCLUSIVE]	= "1:mmap_exclusive",
 };
 
+
+static const char * const debugfs_known_mountpoints[] = {
+	"/sys/kernel/debug",
+	"/debug",
+	0,
+};
 
 /*
  * data structures

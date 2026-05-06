@@ -9,6 +9,11 @@
  *
  *  You may use this code as per GPL version 2
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2015 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #include <linux/module.h>
 #include <linux/types.h>
@@ -755,13 +760,13 @@ __power_supply_register(struct device *parent,
 	}
 
 	spin_lock_init(&psy->changed_lock);
-	rc = device_add(dev);
-	if (rc)
-		goto device_add_failed;
-
 	rc = device_init_wakeup(dev, ws);
 	if (rc)
 		goto wakeup_init_failed;
+
+	rc = device_add(dev);
+	if (rc)
+		goto device_add_failed;
 
 	rc = psy_register_thermal(psy);
 	if (rc)
@@ -798,8 +803,8 @@ register_cooler_failed:
 	psy_unregister_thermal(psy);
 register_thermal_failed:
 	device_del(dev);
-wakeup_init_failed:
 device_add_failed:
+wakeup_init_failed:
 check_supplies_failed:
 dev_set_name_failed:
 	put_device(dev);

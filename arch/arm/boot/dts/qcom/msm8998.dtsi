@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2772,8 +2772,8 @@
 		qcom,bcl-enable;
 		qcom,bcl-framework-interface;
 		qcom,bcl-freq-control-list = <&CPU4 &CPU5 &CPU6 &CPU7>;
-		qcom,bcl-hotplug-list = <>;
-		qcom,bcl-soc-hotplug-list = <>;
+		qcom,bcl-hotplug-list = <&CPU4 &CPU5 &CPU6 &CPU7>;
+		qcom,bcl-soc-hotplug-list = <&CPU4 &CPU5 &CPU6 &CPU7>;
 		qcom,ibat-monitor {
 			qcom,low-threshold-uamp = <3400000>;
 			qcom,high-threshold-uamp = <4200000>;
@@ -2914,9 +2914,9 @@
 			reg = <0x10 8>;
 		};
 
-		dload_type@1c {
+		dload_type@18 {
 			compatible = "qcom,msm-imem-dload-type";
-			reg = <0x1c 4>;
+			reg = <0x18 4>;
 		};
 
 		restart_reason@65c {
